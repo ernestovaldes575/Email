@@ -6,15 +6,12 @@
   const elements = {
     appShell: document.getElementById("appShell"),
     registrationForm: document.getElementById("registrationForm"),
-    email: document.getElementById("email"),
     phone: document.getElementById("phone"),
-    termsAccepted: document.getElementById("termsAccepted"),
     emptyState: document.getElementById("emptyState"),
     pendingState: document.getElementById("pendingState"),
     accessState: document.getElementById("accessState"),
     qrCode: document.getElementById("qrCode"),
     statusBadge: document.getElementById("statusBadge"),
-    summaryEmail: document.getElementById("summaryEmail"),
     summaryPhone: document.getElementById("summaryPhone"),
     expiresIn: document.getElementById("expiresIn"),
     demoCodeBlock: document.getElementById("demoCodeBlock"),
@@ -25,10 +22,9 @@
     verificationCode: document.getElementById("verificationCode"),
     verificationFeedback: document.getElementById("verificationFeedback"),
     resendButton: document.getElementById("resendButton"),
-    accessEmail: document.getElementById("accessEmail"),
     accessPhone: document.getElementById("accessPhone"),
     accessTime: document.getElementById("accessTime"),
-    logoutButton: document.getElementById("logoutButton")
+    portalLink: document.getElementById("portalLink")
   };
 
   const externalLogin = Auth.parseExternalLoginParams(window.location.search);
@@ -81,7 +77,6 @@
     elements.appShell.classList.add("authorization-only");
 
     if (externalLogin.isValid) {
-      elements.email.value = externalLogin.normalized.email;
       elements.phone.value = externalLogin.normalized.phoneDisplay;
     }
   }
@@ -128,7 +123,7 @@
       node.textContent = "";
     });
 
-    [elements.email, elements.phone].forEach((input) => {
+    [elements.phone].forEach((input) => {
       input.classList.remove("is-invalid");
     });
   }
@@ -269,7 +264,6 @@
     setVisible(elements.pendingState, true);
     setVisible(elements.accessState, false);
 
-    elements.summaryEmail.textContent = session.user.email;
     elements.summaryPhone.textContent = session.user.phoneDisplay;
     if (elements.demoCode) {
       elements.demoCode.textContent = "";
@@ -312,12 +306,15 @@
     setVisible(elements.accessState, true);
     stopCountdown();
 
-    elements.accessEmail.textContent = session.user.email || "";
     elements.accessPhone.textContent = session.user.phoneDisplay;
     elements.accessTime.textContent = new Intl.DateTimeFormat("es-MX", {
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(session.verifiedAt || Date.now()));
+    elements.portalLink.href = Auth.buildPortalAccessUrl({
+      phone: session.user.phoneE164,
+      includePhoneParam: session.source === "manual"
+    });
   }
 
   function render() {
@@ -458,20 +455,12 @@
     notify("Nuevo código generado", "El código anterior ya no debe usarse.", "success");
   }
 
-  function handleLogout() {
-    clearSession();
-    elements.registrationForm.reset();
-    elements.verificationCode.value = "";
-    render();
-  }
-
   applyStartupMode();
 
   elements.registrationForm.addEventListener("submit", handleRegistrationSubmit);
   elements.verificationForm.addEventListener("submit", handleVerificationSubmit);
   elements.copyMessageButton.addEventListener("click", handleCopyMessage);
   elements.resendButton.addEventListener("click", handleResend);
-  elements.logoutButton.addEventListener("click", handleLogout);
 
   if (window.lucide) {
     window.lucide.createIcons();

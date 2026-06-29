@@ -171,4 +171,24 @@ describe("AuthCore", () => {
       expect(url).toMatch(/^https:\/\/api\.whatsapp\.com\/send\?phone=527292512286&text=/);
     });
   });
+
+  describe("buildPortalAccessUrl", () => {
+    it("should build the base portal URL for redirected phone numbers", () => {
+      const url = Auth.buildPortalAccessUrl({
+        phone: "527221484739",
+        includePhoneParam: false
+      });
+
+      expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp");
+    });
+
+    it("should append Param1 with the local phone when the number was captured manually", () => {
+      const url = Auth.buildPortalAccessUrl({
+        phone: "527221484739",
+        includePhoneParam: true
+      });
+
+      expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739");
+    });
+  });
 });

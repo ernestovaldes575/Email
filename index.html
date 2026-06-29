@@ -24,7 +24,7 @@
       };
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260629-2" />
+    <link rel="stylesheet" href="src/styles.css?v=20260629-3" />
   </head>
   <body class="min-h-screen bg-surface text-slate-900">
     <main class="min-h-screen overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
@@ -41,23 +41,6 @@
           </div>
 
           <div class="space-y-5">
-            <div id="emailField">
-              <label for="email" class="mb-2 block text-sm font-medium text-slate-700">Correo electrónico</label>
-              <div class="relative">
-                <i data-lucide="mail" class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"></i>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autocomplete="email"
-                  class="field pl-11"
-                  placeholder="usuario@correo.com"
-                  required
-                />
-              </div>
-              <p class="mt-2 min-h-5 text-sm text-red-600" data-error-for="email"></p>
-            </div>
-
             <div>
               <label for="phone" class="mb-2 block text-sm font-medium text-slate-700">Número telefónico</label>
               <div class="relative">
@@ -76,15 +59,9 @@
               <p class="mt-2 min-h-5 text-sm text-red-600" data-error-for="phone"></p>
             </div>
 
-            <label id="termsBlock" class="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <input id="termsAccepted" name="termsAccepted" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand" />
-              <span class="min-w-0 flex-1 text-sm leading-6 text-slate-700">Autorizo asociar mi correo y teléfono para validar este acceso.</span>
-            </label>
-            <p id="termsError" class="-mt-3 min-h-5 text-sm text-red-600" data-error-for="termsAccepted"></p>
-
             <button type="submit" class="btn-primary w-full">
               <i data-lucide="shield-check" class="h-5 w-5"></i>
-              Autorizar acceso
+              Verificar
             </button>
           </div>
         </form>
@@ -120,10 +97,6 @@
 
               <div class="space-y-5">
                 <dl class="grid gap-3 text-sm sm:grid-cols-2">
-                  <div id="summaryEmailBlock">
-                    <dt class="text-slate-500">Correo</dt>
-                    <dd id="summaryEmail" class="mt-1 break-all font-medium text-slate-900"></dd>
-                  </div>
                   <div>
                     <dt class="text-slate-500">Teléfono</dt>
                     <dd id="summaryPhone" class="mt-1 font-medium text-slate-900"></dd>
@@ -186,10 +159,6 @@
                 <p class="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Sesión activa</p>
                 <h2 class="mt-2 text-3xl font-semibold text-ink">Acceso autorizado</h2>
                 <dl class="mt-7 grid gap-4 text-sm sm:grid-cols-2">
-                  <div id="accessEmailBlock">
-                    <dt class="text-slate-500">Correo</dt>
-                    <dd id="accessEmail" class="mt-1 break-all font-medium text-slate-900"></dd>
-                  </div>
                   <div>
                     <dt class="text-slate-500">Teléfono</dt>
                     <dd id="accessPhone" class="mt-1 font-medium text-slate-900"></dd>
@@ -200,10 +169,10 @@
                   </div>
                 </dl>
               </div>
-              <button id="logoutButton" type="button" class="btn-secondary mt-8 w-full sm:w-fit">
-                <i data-lucide="log-out" class="h-5 w-5"></i>
-                Cerrar sesión
-              </button>
+              <a id="portalLink" class="btn-primary mt-8 w-full sm:w-fit" href="http://201.122.44.34/PortalSerPub/SerPubVal02.asp">
+                <i data-lucide="external-link" class="h-5 w-5"></i>
+                Continuar
+              </a>
             </div>
           </div>
         </section>
@@ -213,8 +182,8 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="src/auth.js?v=20260629-2"></script>
-    <script src="src/config.js?v=20260629-2"></script>
-    <script src="src/app.js?v=20260629-2"></script>
+    <script src="src/auth.js?v=20260629-3"></script>
+    <script src="src/config.js?v=20260629-3"></script>
+    <script src="src/app.js?v=20260629-3"></script>
   </body>
 </html>

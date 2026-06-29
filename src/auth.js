@@ -8,6 +8,7 @@
   const DEFAULT_COUNTRY_CODE = "52";
   const DEFAULT_TTL_MINUTES = 5;
   const DEFAULT_MAX_ATTEMPTS = 3;
+  const DEFAULT_PORTAL_URL = "http://201.122.44.34/PortalSerPub/SerPubVal02.asp";
 
   function normalizeEmail(email) {
     return String(email || "").trim().toLowerCase();
@@ -258,6 +259,35 @@
     return `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(message)}`;
   }
 
+  function getPortalPhoneParam(phone, countryCode = DEFAULT_COUNTRY_CODE) {
+    const digits = sanitizeDigits(phone);
+    const cleanCountryCode = sanitizeDigits(countryCode) || DEFAULT_COUNTRY_CODE;
+
+    if (digits.length === cleanCountryCode.length + 10 && digits.startsWith(cleanCountryCode)) {
+      return digits.slice(cleanCountryCode.length);
+    }
+
+    return digits;
+  }
+
+  function buildPortalAccessUrl(values) {
+    const data = values || {};
+    const baseUrl = data.baseUrl || DEFAULT_PORTAL_URL;
+
+    if (!data.includePhoneParam) {
+      return baseUrl;
+    }
+
+    const phone = getPortalPhoneParam(data.phone);
+
+    if (!phone) {
+      return baseUrl;
+    }
+
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}Param1=${encodeURIComponent(phone)}`;
+  }
+
   function formatRemainingTime(milliseconds) {
     const safeMs = Math.max(Number(milliseconds) || 0, 0);
     const totalSeconds = Math.ceil(safeMs / 1000);
@@ -270,6 +300,7 @@
     DEFAULT_COUNTRY_CODE,
     DEFAULT_TTL_MINUTES,
     DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_PORTAL_URL,
     normalizeEmail,
     isValidEmail,
     sanitizeDigits,
@@ -283,6 +314,8 @@
     verifyCode,
     buildAuthorizationMessage,
     buildWhatsAppAuthorizationUrl,
+    getPortalPhoneParam,
+    buildPortalAccessUrl,
     formatRemainingTime
   };
 });

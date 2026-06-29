@@ -37,12 +37,7 @@ body {
 
 #demoCodeBlock,
 #copyMessageButton,
-#resendButton,
-#emailField,
-#termsBlock,
-#termsError,
-#summaryEmailBlock,
-#accessEmailBlock {
+#resendButton {
   display: none !important;
 }
 
