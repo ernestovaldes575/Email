@@ -68,6 +68,61 @@
     };
   }
 
+  function validatePhoneAccess(values) {
+    const input = values || {};
+    const errors = {};
+    const normalized = { email: "" };
+
+    try {
+      Object.assign(normalized, normalizePhone(input.phone, input.countryCode));
+    } catch (error) {
+      errors.phone = "Escribe un telefono valido con 10 a 15 digitos.";
+    }
+
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors,
+      normalized
+    };
+  }
+
+  function getQueryParamCaseInsensitive(params, name) {
+    const expected = String(name).toLowerCase();
+
+    for (const [key, value] of params.entries()) {
+      if (String(key).toLowerCase() === expected) {
+        return value;
+      }
+    }
+
+    return "";
+  }
+
+  function parseExternalLoginParams(search) {
+    const params = search instanceof URLSearchParams
+      ? search
+      : new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    const phone = getQueryParamCaseInsensitive(params, "Param1");
+
+    if (!phone) {
+      return {
+        hasParams: false,
+        isValid: false,
+        errors: {},
+        normalized: {}
+      };
+    }
+
+    const result = validatePhoneAccess({ phone });
+
+    return {
+      hasParams: true,
+      isValid: result.isValid,
+      errors: result.errors,
+      normalized: result.normalized
+    };
+  }
+
   function generateVerificationCode(random = Math.random) {
     const value = Math.floor(random() * 1000000);
     return String(value).padStart(6, "0");
@@ -83,7 +138,7 @@
     return {
       id: `wa_${now}_${code}`,
       user: {
-        email: user.email,
+        email: user.email || "",
         phoneE164: user.phoneE164,
         phoneDisplay: user.phoneDisplay
       },
@@ -173,19 +228,34 @@
 
   function buildAuthorizationMessage(values) {
     const data = values || {};
-    return [
+    const lines = [
       `AUTORIZAR ${data.code}`,
-      `Correo: ${data.email}`,
-      `Teléfono: +${sanitizeDigits(data.userPhone)}`
-    ].join("\n");
+      `Telefono: +${sanitizeDigits(data.userPhone)}`
+    ];
+
+    if (data.email) {
+      lines.splice(1, 0, `Correo: ${data.email}`);
+    }
+
+    return lines.join("\n");
   }
 
   function buildWhatsAppAuthorizationUrl(values) {
     const data = values || {};
-    const businessPhone = sanitizeDigits(data.businessPhone);
+    let businessPhone = "";
+
+    try {
+      businessPhone = normalizePhone(data.businessPhone).phoneE164;
+    } catch (error) {
+      businessPhone = "";
+    }
+
+    if (!businessPhone) {
+      return "";
+    }
+
     const message = buildAuthorizationMessage(data);
-    const baseUrl = businessPhone ? `https://wa.me/${businessPhone}` : "https://wa.me/";
-    return `${baseUrl}?text=${encodeURIComponent(message)}`;
+    return `https://api.whatsapp.com/send?phone=${businessPhone}&text=${encodeURIComponent(message)}`;
   }
 
   function formatRemainingTime(milliseconds) {
@@ -205,6 +275,8 @@
     sanitizeDigits,
     normalizePhone,
     validateRegistration,
+    validatePhoneAccess,
+    parseExternalLoginParams,
     generateVerificationCode,
     createVerificationSession,
     isExpired,

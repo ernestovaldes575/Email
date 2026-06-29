@@ -30,6 +30,22 @@ body {
   box-shadow: 0 18px 55px rgba(15, 23, 42, 0.10);
 }
 
+.authorization-only {
+  grid-template-columns: minmax(0, 1fr) !important;
+  max-width: 760px;
+}
+
+#demoCodeBlock,
+#copyMessageButton,
+#resendButton,
+#emailField,
+#termsBlock,
+#termsError,
+#summaryEmailBlock,
+#accessEmailBlock {
+  display: none !important;
+}
+
 .field {
   width: 100%;
   border-radius: 8px;

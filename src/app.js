@@ -1,11 +1,10 @@
 (function () {
   const Auth = window.AuthCore;
   const STORAGE_KEY = "whatsapp-login-demo:session";
-  const APP_CONFIG = {
-    whatsappBusinessPhone: ""
-  };
+  const runtimeConfig = window.WHATSAPP_LOGIN_CONFIG || {};
 
   const elements = {
+    appShell: document.getElementById("appShell"),
     registrationForm: document.getElementById("registrationForm"),
     email: document.getElementById("email"),
     phone: document.getElementById("phone"),
@@ -18,6 +17,7 @@
     summaryEmail: document.getElementById("summaryEmail"),
     summaryPhone: document.getElementById("summaryPhone"),
     expiresIn: document.getElementById("expiresIn"),
+    demoCodeBlock: document.getElementById("demoCodeBlock"),
     demoCode: document.getElementById("demoCode"),
     whatsappLink: document.getElementById("whatsappLink"),
     copyMessageButton: document.getElementById("copyMessageButton"),
@@ -31,8 +31,79 @@
     logoutButton: document.getElementById("logoutButton")
   };
 
-  let currentSession = loadSession();
+  const externalLogin = Auth.parseExternalLoginParams(window.location.search);
+  let currentSession = null;
   let countdownTimer = null;
+
+  currentSession = initializeSession();
+
+  function getSessionKey(user) {
+    return user.phoneE164;
+  }
+
+  function initializeSession() {
+    const storedSession = loadSession();
+
+    if (!externalLogin.hasParams) {
+      return null;
+    }
+
+    if (!externalLogin.isValid) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
+    const paramKey = getSessionKey(externalLogin.normalized);
+    const canReuseStoredSession =
+      storedSession &&
+      storedSession.source === "external-login" &&
+      storedSession.paramKey === paramKey &&
+      !Auth.isExpired(storedSession);
+
+    if (canReuseStoredSession) {
+      return storedSession;
+    }
+
+    const session = Auth.createVerificationSession(externalLogin.normalized);
+    session.source = "external-login";
+    session.paramKey = paramKey;
+    saveSession(session);
+    return session;
+  }
+
+  function applyStartupMode() {
+    if (!externalLogin.hasParams) {
+      return;
+    }
+
+    elements.registrationForm.classList.add("hidden");
+    elements.resendButton.classList.add("hidden");
+    elements.appShell.classList.add("authorization-only");
+
+    if (externalLogin.isValid) {
+      elements.email.value = externalLogin.normalized.email;
+      elements.phone.value = externalLogin.normalized.phoneDisplay;
+    }
+  }
+
+  function getQueryReceiverPhone() {
+    const queryParams = new URLSearchParams(window.location.search);
+    return Auth.sanitizeDigits(queryParams.get("wa"));
+  }
+
+  function getReceiverPhoneForSession(session) {
+    const queryPhone = getQueryReceiverPhone();
+
+    if (queryPhone) {
+      return queryPhone;
+    }
+
+    if (runtimeConfig.receiverMode === "fixed") {
+      return Auth.sanitizeDigits(runtimeConfig.authorizationReceiverPhone || runtimeConfig.whatsappBusinessPhone || "");
+    }
+
+    return session && session.user ? session.user.phoneE164 : "";
+  }
 
   function setVisible(element, isVisible) {
     element.classList.toggle("hidden", !isVisible);
@@ -81,6 +152,7 @@
   function saveSession(session) {
     currentSession = session;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    return session;
   }
 
   function loadSession() {
@@ -99,7 +171,7 @@
 
   function getAuthorizationPayload(session) {
     return {
-      businessPhone: APP_CONFIG.whatsappBusinessPhone,
+      businessPhone: getReceiverPhoneForSession(session),
       code: session.code,
       email: session.user.email,
       userPhone: session.user.phoneE164
@@ -108,6 +180,11 @@
 
   function renderQrCode(url) {
     elements.qrCode.innerHTML = "";
+
+    if (!url) {
+      elements.qrCode.innerHTML = '<div class="px-3 text-center text-sm font-medium text-slate-500">Falta numero destino</div>';
+      return;
+    }
 
     if (!window.QRCode) {
       elements.qrCode.textContent = "QR";
@@ -153,10 +230,10 @@
     }
   }
 
-  function setPendingAvailability(isAvailable) {
+  function setPendingAvailability(isAvailable, hasReceiverPhone) {
     elements.verificationCode.disabled = !isAvailable;
-    elements.whatsappLink.setAttribute("aria-disabled", String(!isAvailable));
-    elements.whatsappLink.classList.toggle("pointer-events-none", !isAvailable);
+    elements.whatsappLink.setAttribute("aria-disabled", String(!isAvailable || !hasReceiverPhone));
+    elements.whatsappLink.classList.toggle("pointer-events-none", !isAvailable || !hasReceiverPhone);
     elements.copyMessageButton.disabled = !isAvailable;
   }
 
@@ -165,13 +242,28 @@
     setVisible(elements.pendingState, false);
     setVisible(elements.accessState, false);
     stopCountdown();
+
+    if (externalLogin.hasParams && !externalLogin.isValid) {
+      const title = elements.emptyState.querySelector("h2");
+      const copy = elements.emptyState.querySelector("p");
+
+      if (title) {
+        title.textContent = "Parametros invalidos";
+      }
+
+      if (copy) {
+        copy.textContent = "Param1 debe ser un telefono valido.";
+      }
+    }
   }
 
   function renderPending(session) {
     const expired = session.status === "expired" || Auth.isExpired(session);
     const blocked = session.status === "blocked";
     const available = !expired && !blocked;
+    const receiverPhone = getReceiverPhoneForSession(session);
     const authUrl = Auth.buildWhatsAppAuthorizationUrl(getAuthorizationPayload(session));
+    const hasReceiverPhone = Boolean(receiverPhone);
 
     setVisible(elements.emptyState, false);
     setVisible(elements.pendingState, true);
@@ -179,13 +271,17 @@
 
     elements.summaryEmail.textContent = session.user.email;
     elements.summaryPhone.textContent = session.user.phoneDisplay;
-    elements.demoCode.textContent = session.code;
-    elements.whatsappLink.href = authUrl;
+    if (elements.demoCode) {
+      elements.demoCode.textContent = "";
+    }
+    elements.whatsappLink.href = authUrl || "#";
     elements.verificationFeedback.textContent = blocked
       ? "Se agotaron los intentos. Genera un nuevo código."
       : expired
         ? "El código expiró. Genera uno nuevo para continuar."
-        : `Intentos disponibles: ${session.maxAttempts - session.attempts}`;
+        : hasReceiverPhone
+          ? `Intentos disponibles: ${session.maxAttempts - session.attempts}`
+          : "Captura un telefono valido para abrir un chat directo.";
 
     elements.statusBadge.className = "inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-sm font-medium";
     if (blocked) {
@@ -199,7 +295,7 @@
       elements.statusBadge.innerHTML = '<span class="h-2 w-2 rounded-full bg-amber-500"></span> Pendiente';
     }
 
-    setPendingAvailability(available);
+    setPendingAvailability(available, hasReceiverPhone);
     renderQrCode(authUrl);
 
     if (available) {
@@ -216,7 +312,7 @@
     setVisible(elements.accessState, true);
     stopCountdown();
 
-    elements.accessEmail.textContent = session.user.email;
+    elements.accessEmail.textContent = session.user.email || "";
     elements.accessPhone.textContent = session.user.phoneDisplay;
     elements.accessTime.textContent = new Intl.DateTimeFormat("es-MX", {
       dateStyle: "medium",
@@ -245,10 +341,8 @@
   function handleRegistrationSubmit(event) {
     event.preventDefault();
 
-    const result = Auth.validateRegistration({
-      email: elements.email.value,
-      phone: elements.phone.value,
-      termsAccepted: elements.termsAccepted.checked
+    const result = Auth.validatePhoneAccess({
+      phone: elements.phone.value
     });
 
     if (!result.isValid) {
@@ -258,13 +352,15 @@
 
     clearFieldErrors();
     const session = Auth.createVerificationSession(result.normalized);
+    session.source = "manual";
+    session.paramKey = getSessionKey(result.normalized);
     saveSession(session);
     elements.verificationCode.value = "";
     render();
     notify("Validación creada", "Abre WhatsApp y envía el mensaje de autorización.", "success");
   }
 
-  function handleVerificationSubmit(event) {
+  async function handleVerificationSubmit(event) {
     event.preventDefault();
 
     if (!currentSession) {
@@ -275,9 +371,18 @@
     saveSession(result.session);
 
     if (result.ok) {
+      const savedAccess = await saveAuthorizedAccess(result.session);
       elements.verificationCode.value = "";
+      saveSession({
+        ...result.session,
+        accessSaved: savedAccess.ok
+      });
       render();
-      notify("Acceso autorizado", "La sesión quedó activa.", "success");
+      notify(
+        "Acceso autorizado",
+        savedAccess.ok ? "Numero guardado en JSON." : "Acceso autorizado. No se pudo guardar en JSON desde este servidor.",
+        savedAccess.ok ? "success" : "warning"
+      );
       return;
     }
 
@@ -313,6 +418,34 @@
     }
   }
 
+  async function saveAuthorizedAccess(session) {
+    const payload = {
+      phone: session.user.phoneE164,
+      phoneDisplay: session.user.phoneDisplay,
+      authorizedAt: new Date(session.verifiedAt || Date.now()).toISOString(),
+      source: session.source || "manual"
+    };
+
+    try {
+      const response = await fetch("guardar-acceso.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error("SAVE_FAILED");
+      }
+
+      return { ok: true };
+    } catch (error) {
+      localStorage.setItem("whatsapp-login-demo:last-access", JSON.stringify(payload));
+      return { ok: false, error };
+    }
+  }
+
   function handleResend() {
     if (!currentSession) {
       return;
@@ -331,6 +464,8 @@
     elements.verificationCode.value = "";
     render();
   }
+
+  applyStartupMode();
 
   elements.registrationForm.addEventListener("submit", handleRegistrationSubmit);
   elements.verificationForm.addEventListener("submit", handleVerificationSubmit);

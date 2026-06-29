@@ -31,10 +31,56 @@ describe("AuthCore", () => {
     });
   });
 
+  describe("validatePhoneAccess", () => {
+    it("should validate a phone-only access request", () => {
+      const result = Auth.validatePhoneAccess({
+        phone: "722 148 4739"
+      });
+
+      expect(result.isValid).toBe(true);
+      expect(result.normalized).toEqual({
+        email: "",
+        phoneE164: "527221484739",
+        phoneDisplay: "+527221484739"
+      });
+    });
+  });
+
   describe("generateVerificationCode", () => {
     it("should create a six digit code", () => {
       expect(Auth.generateVerificationCode(() => 0.42)).toBe("420000");
       expect(Auth.generateVerificationCode(() => 0.00001)).toBe("000010");
+    });
+  });
+
+  describe("parseExternalLoginParams", () => {
+    it("should parse Param1 as the redirected phone number", () => {
+      const result = Auth.parseExternalLoginParams(
+        "?Param1=7221484739"
+      );
+
+      expect(result.hasParams).toBe(true);
+      expect(result.isValid).toBe(true);
+      expect(result.normalized).toEqual({
+        email: "",
+        phoneE164: "527221484739",
+        phoneDisplay: "+527221484739"
+      });
+    });
+
+    it("should be invalid when redirected parameters are malformed", () => {
+      const result = Auth.parseExternalLoginParams("?Param1=123");
+
+      expect(result.hasParams).toBe(true);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveProperty("phone");
+    });
+
+    it("should ignore URLs without redirected login parameters", () => {
+      const result = Auth.parseExternalLoginParams("?wa=525512345678");
+
+      expect(result.hasParams).toBe(false);
+      expect(result.isValid).toBe(false);
     });
   });
 
@@ -91,16 +137,14 @@ describe("AuthCore", () => {
   });
 
   describe("buildWhatsAppAuthorizationUrl", () => {
-    it("should build a WhatsApp share URL when no business phone is configured", () => {
+    it("should not build a WhatsApp URL when no receiver phone is configured", () => {
       const url = Auth.buildWhatsAppAuthorizationUrl({
         code: "654321",
         email: "usuario@correo.com",
         userPhone: "525512345678"
       });
 
-      expect(url).toMatch(/^https:\/\/wa\.me\/\?text=/);
-      expect(decodeURIComponent(url)).toContain("AUTORIZAR 654321");
-      expect(decodeURIComponent(url)).toContain("usuario@correo.com");
+      expect(url).toBe("");
     });
 
     it("should build a direct WhatsApp URL when a business phone is configured", () => {
@@ -111,7 +155,20 @@ describe("AuthCore", () => {
         userPhone: "525512345678"
       });
 
-      expect(url).toMatch(/^https:\/\/wa\.me\/525500000000\?text=/);
+      expect(url).toMatch(/^https:\/\/api\.whatsapp\.com\/send\?phone=525500000000&text=/);
+      expect(decodeURIComponent(url)).toContain("AUTORIZAR 654321");
+      expect(decodeURIComponent(url)).toContain("usuario@correo.com");
+    });
+
+    it("should normalize a ten digit receiver phone before building the URL", () => {
+      const url = Auth.buildWhatsAppAuthorizationUrl({
+        businessPhone: "729 251 2286",
+        code: "654321",
+        email: "usuario@correo.com",
+        userPhone: "527292512286"
+      });
+
+      expect(url).toMatch(/^https:\/\/api\.whatsapp\.com\/send\?phone=527292512286&text=/);
     });
   });
 });
