@@ -1,0 +1,128 @@
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.bg-surface {
+  background-color: #f6f7f5;
+}
+
+.bg-brand {
+  background-color: #128c7e;
+}
+
+.text-brand {
+  color: #128c7e;
+}
+
+.text-ink {
+  color: #17212b;
+}
+
+.shadow-panel {
+  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.10);
+}
+
+.field {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  min-height: 46px;
+  padding: 0.75rem 0.9rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.field:focus {
+  border-color: #128c7e;
+  box-shadow: 0 0 0 4px rgba(18, 140, 126, 0.16);
+}
+
+.field.is-invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-whatsapp,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 46px;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.btn-primary {
+  background: #128c7e;
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: #0f766e;
+}
+
+.btn-secondary {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #17212b;
+}
+
+.btn-secondary:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.btn-whatsapp {
+  background: #25d366;
+  color: #062d1a;
+}
+
+.btn-whatsapp:hover {
+  background: #1fbd59;
+}
+
+.btn-ghost {
+  color: #2563eb;
+}
+
+.btn-ghost:hover {
+  background: #eff6ff;
+}
+
+.btn-primary:active,
+.btn-secondary:active,
+.btn-whatsapp:active,
+.btn-ghost:active {
+  transform: translateY(1px);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-whatsapp[aria-disabled="true"],
+.btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+#qrCode canvas,
+#qrCode img {
+  height: 156px;
+  width: 156px;
+}

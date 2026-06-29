@@ -1,0 +1,13 @@
+{
+  "name": "whatsapp-login-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Login frontend con registro por correo, telefono y autorizacion simulada por WhatsApp.",
+  "scripts": {
+    "test": "jest",
+    "serve": "node dev-server.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
