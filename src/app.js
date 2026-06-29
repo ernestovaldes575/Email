@@ -313,7 +313,7 @@
     }).format(new Date(session.verifiedAt || Date.now()));
     elements.portalLink.href = Auth.buildPortalAccessUrl({
       phone: session.user.phoneE164,
-      includePhoneParam: session.source === "manual"
+      includePhoneParam: true
     });
   }
 

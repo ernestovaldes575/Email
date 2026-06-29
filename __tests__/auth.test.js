@@ -173,13 +173,13 @@ describe("AuthCore", () => {
   });
 
   describe("buildPortalAccessUrl", () => {
-    it("should build the base portal URL for redirected phone numbers", () => {
+    it("should append Param1 even when the number came from redirected parameters", () => {
       const url = Auth.buildPortalAccessUrl({
         phone: "527221484739",
-        includePhoneParam: false
+        includePhoneParam: true
       });
 
-      expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp");
+      expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739");
     });
 
     it("should append Param1 with the local phone when the number was captured manually", () => {

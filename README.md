@@ -58,14 +58,10 @@ En hosting PHP, asegúrate de que la carpeta `data` tenga permisos de escritura 
 Despues de verificar correctamente, aparece un boton `Continuar` hacia:
 
 ```text
-http://201.122.44.34/PortalSerPub/SerPubVal02.asp
-```
-
-Si el telefono se capturo manualmente porque no venia `Param1` en la URL, el boton agrega el telefono local:
-
-```text
 http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739
 ```
+
+Siempre se envia `Param1` con el telefono validado, aunque el telefono haya llegado originalmente por URL o se haya capturado manualmente.
 
 ## Pruebas
 
