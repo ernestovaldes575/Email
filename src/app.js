@@ -6,6 +6,7 @@
   const elements = {
     appShell: document.getElementById("appShell"),
     registrationForm: document.getElementById("registrationForm"),
+    registrationSubmit: document.getElementById("registrationSubmit"),
     phone: document.getElementById("phone"),
     emptyState: document.getElementById("emptyState"),
     pendingState: document.getElementById("pendingState"),
@@ -31,6 +32,7 @@
   const externalLogin = Auth.parseExternalLoginParams(window.location.search);
   let currentSession = null;
   let countdownTimer = null;
+  let startupCoordinates = "";
 
   currentSession = initializeSession();
 
@@ -76,11 +78,14 @@
     elements.registrationForm.classList.add("hidden");
     elements.resendButton.classList.add("hidden");
     elements.appShell.classList.add("authorization-only");
+    setRegistrationReady(false);
 
     if (externalLogin.isValid) {
       elements.phone.value = externalLogin.normalized.phoneDisplay;
     }
   }
+
+  preloadCoordinates();
 
   function getQueryReceiverPhone() {
     const queryParams = new URLSearchParams(window.location.search);
@@ -127,6 +132,26 @@
     [elements.phone].forEach((input) => {
       input.classList.remove("is-invalid");
     });
+  }
+
+  function setRegistrationReady(isReady) {
+    if (elements.registrationSubmit) {
+      elements.registrationSubmit.disabled = !isReady;
+    }
+  }
+
+  async function preloadCoordinates() {
+    const coordinates = await getBrowserCoordinates();
+    if (isValidCoordinates(coordinates)) {
+      startupCoordinates = coordinates;
+      setRegistrationReady(true);
+      elements.verificationFeedback.textContent = "Ubicacion capturada. Ya puedes verificar.";
+      return;
+    }
+
+    startupCoordinates = "";
+    setRegistrationReady(false);
+    elements.verificationFeedback.textContent = "La ubicacion es obligatoria. Permite el acceso para continuar.";
   }
 
   function showFieldErrors(errors) {
@@ -185,6 +210,10 @@
         }
       );
     });
+  }
+
+  function isValidCoordinates(value) {
+    return Boolean(Auth.parseCoordinatesParam(value));
   }
 
   function getAuthorizationPayload(session) {
@@ -374,8 +403,21 @@
     }
 
     clearFieldErrors();
-    elements.verificationFeedback.textContent = "Obteniendo ubicacion antes de generar la validacion...";
-    const coordinates = result.normalized.coordinates || await getBrowserCoordinates();
+    setRegistrationReady(false);
+    elements.verificationFeedback.textContent = "Obteniendo ubicacion del dispositivo...";
+    const coordinates = result.normalized.coordinates || startupCoordinates || await getBrowserCoordinates();
+
+    if (!isValidCoordinates(coordinates)) {
+      elements.verificationFeedback.textContent = "La ubicacion es obligatoria. Activa el GPS o permite el acceso a ubicacion para continuar.";
+      setRegistrationReady(true);
+      notify(
+        "Ubicacion requerida",
+        "Debes permitir el acceso a ubicacion para generar la validacion.",
+        "warning"
+      );
+      return;
+    }
+
     const session = Auth.createVerificationSession({
       ...result.normalized,
       coordinates
@@ -385,6 +427,7 @@
     saveSession(session);
     elements.verificationCode.value = "";
     elements.verificationFeedback.textContent = "";
+    setRegistrationReady(true);
     render();
     notify("Validación creada", "Abre WhatsApp y envía el mensaje de autorización.", "success");
   }
