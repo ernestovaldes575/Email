@@ -99,11 +99,37 @@
     return "";
   }
 
+  function parseCoordinatesParam(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+
+    const match = raw.match(/^(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)$/);
+    if (!match) {
+      return "";
+    }
+
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return "";
+    }
+
+    if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      return "";
+    }
+
+    return `${lat},${lng}`;
+  }
+
   function parseExternalLoginParams(search) {
     const params = search instanceof URLSearchParams
       ? search
       : new URLSearchParams(String(search || "").replace(/^\?/, ""));
     const phone = getQueryParamCaseInsensitive(params, "Param1");
+    const coordinates = parseCoordinatesParam(getQueryParamCaseInsensitive(params, "Param2"));
 
     if (!phone) {
       return {
@@ -115,6 +141,7 @@
     }
 
     const result = validatePhoneAccess({ phone });
+    result.normalized.coordinates = coordinates;
 
     return {
       hasParams: true,
@@ -141,7 +168,8 @@
       user: {
         email: user.email || "",
         phoneE164: user.phoneE164,
-        phoneDisplay: user.phoneDisplay
+        phoneDisplay: user.phoneDisplay,
+        coordinates: user.coordinates || ""
       },
       code,
       status: "pending",
@@ -279,13 +307,20 @@
     }
 
     const phone = getPortalPhoneParam(data.phone);
+    const coordinates = parseCoordinatesParam(data.coordinates);
 
     if (!phone) {
       return baseUrl;
     }
 
     const separator = baseUrl.includes("?") ? "&" : "?";
-    return `${baseUrl}${separator}Param1=${encodeURIComponent(phone)}`;
+    let url = `${baseUrl}${separator}Param1=${encodeURIComponent(phone)}`;
+
+    if (coordinates) {
+      url += `&Param2=${encodeURIComponent(coordinates)}`;
+    }
+
+    return url;
   }
 
   function formatRemainingTime(milliseconds) {
@@ -308,6 +343,7 @@
     validateRegistration,
     validatePhoneAccess,
     parseExternalLoginParams,
+    parseCoordinatesParam,
     generateVerificationCode,
     createVerificationSession,
     isExpired,

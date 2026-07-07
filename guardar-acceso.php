@@ -16,10 +16,17 @@ if (!is_array($input)) {
 }
 
 $phone = preg_replace('/\D+/', '', (string)($input['phone'] ?? ''));
+$coordinates = trim((string)($input['coordinates'] ?? ''));
 
 if (strlen($phone) < 10 || strlen($phone) > 15) {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => 'INVALID_PHONE']);
+    exit;
+}
+
+if ($coordinates !== '' && !preg_match('/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/', $coordinates)) {
+    http_response_code(400);
+    echo json_encode(['ok' => false, 'error' => 'INVALID_COORDINATES']);
     exit;
 }
 
@@ -33,6 +40,7 @@ if (!is_dir($directory)) {
 $entry = [
     'phone' => $phone,
     'phoneDisplay' => '+' . $phone,
+    'coordinates' => $coordinates,
     'authorizedAt' => gmdate('c'),
     'source' => preg_replace('/[^a-z0-9_-]/i', '', (string)($input['source'] ?? 'unknown')),
     'ip' => $_SERVER['REMOTE_ADDR'] ?? '',

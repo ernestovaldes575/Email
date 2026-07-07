@@ -63,9 +63,20 @@ describe("AuthCore", () => {
       expect(result.isValid).toBe(true);
       expect(result.normalized).toEqual({
         email: "",
+        coordinates: "",
         phoneE164: "527221484739",
         phoneDisplay: "+527221484739"
       });
+    });
+
+    it("should parse Param2 as coordinates when present", () => {
+      const result = Auth.parseExternalLoginParams(
+        "?Param1=7221484739&Param2=19.4326,-99.1332"
+      );
+
+      expect(result.hasParams).toBe(true);
+      expect(result.isValid).toBe(true);
+      expect(result.normalized.coordinates).toBe("19.4326,-99.1332");
     });
 
     it("should be invalid when redirected parameters are malformed", () => {
@@ -189,6 +200,16 @@ describe("AuthCore", () => {
       });
 
       expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739");
+    });
+
+    it("should append Param2 coordinates when provided", () => {
+      const url = Auth.buildPortalAccessUrl({
+        phone: "527221484739",
+        coordinates: "19.4326,-99.1332",
+        includePhoneParam: true
+      });
+
+      expect(url).toBe("http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739&Param2=19.4326%2C-99.1332");
     });
   });
 });

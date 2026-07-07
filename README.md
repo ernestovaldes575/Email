@@ -35,13 +35,15 @@ Tambien puedes probar un destino puntual con `?wa=525512345678`. Por seguridad, 
 
 ## Redireccion desde login
 
-Despues de validar clave y contrasena en tu login, redirige a esta pantalla con un solo parametro:
+Despues de validar clave y contrasena en tu login, redirige a esta pantalla con el telefono en `Param1` y, si lo tienes, la ubicacion en `Param2`:
 
 ```text
-index.html?Param1=7221484739
+index.html?Param1=7221484739&Param2=19.4326,-99.1332
 ```
 
-`Param1` es el telefono del usuario que inicio sesion. Si existe, la pantalla oculta el formulario manual y pasa directo a autorizacion por WhatsApp.
+`Param1` es el telefono del usuario que inicio sesion. `Param2` acepta coordenadas en formato `lat,lng`.
+
+Si existe `Param1`, la pantalla oculta el formulario manual y pasa directo a autorizacion por WhatsApp.
 
 Si no llega `Param1`, la pantalla muestra un campo para capturar el telefono manualmente.
 
@@ -61,7 +63,7 @@ Despues de verificar correctamente, aparece un boton `Continuar` hacia:
 http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739
 ```
 
-Siempre se envia `Param1` con el telefono validado, aunque el telefono haya llegado originalmente por URL o se haya capturado manualmente.
+Siempre se envia `Param1` con el telefono validado, y si venian coordenadas en `Param2`, tambien se conservan al guardar el acceso y al construir el enlace al portal.
 
 ## Pruebas
 

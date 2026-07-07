@@ -23,6 +23,7 @@
     verificationFeedback: document.getElementById("verificationFeedback"),
     resendButton: document.getElementById("resendButton"),
     accessPhone: document.getElementById("accessPhone"),
+    accessCoordinates: document.getElementById("accessCoordinates"),
     accessTime: document.getElementById("accessTime"),
     portalLink: document.getElementById("portalLink")
   };
@@ -164,12 +165,35 @@
     localStorage.removeItem(STORAGE_KEY);
   }
 
+  function getBrowserCoordinates() {
+    if (!navigator.geolocation) {
+      return Promise.resolve("");
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const latitude = Number(position.coords.latitude.toFixed(6));
+          const longitude = Number(position.coords.longitude.toFixed(6));
+          resolve(Auth.parseCoordinatesParam(`${latitude},${longitude}`));
+        },
+        () => resolve(""),
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 60000
+        }
+      );
+    });
+  }
+
   function getAuthorizationPayload(session) {
     return {
       businessPhone: getReceiverPhoneForSession(session),
       code: session.code,
       email: session.user.email,
-      userPhone: session.user.phoneE164
+      userPhone: session.user.phoneE164,
+      coordinates: session.user.coordinates || ""
     };
   }
 
@@ -307,12 +331,14 @@
     stopCountdown();
 
     elements.accessPhone.textContent = session.user.phoneDisplay;
+    elements.accessCoordinates.textContent = session.user.coordinates || "Sin coordenadas";
     elements.accessTime.textContent = new Intl.DateTimeFormat("es-MX", {
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(session.verifiedAt || Date.now()));
     elements.portalLink.href = Auth.buildPortalAccessUrl({
       phone: session.user.phoneE164,
+      coordinates: session.user.coordinates,
       includePhoneParam: true
     });
   }
@@ -335,7 +361,7 @@
     }
   }
 
-  function handleRegistrationSubmit(event) {
+  async function handleRegistrationSubmit(event) {
     event.preventDefault();
 
     const result = Auth.validatePhoneAccess({
@@ -348,11 +374,17 @@
     }
 
     clearFieldErrors();
-    const session = Auth.createVerificationSession(result.normalized);
+    elements.verificationFeedback.textContent = "Obteniendo ubicacion antes de generar la validacion...";
+    const coordinates = result.normalized.coordinates || await getBrowserCoordinates();
+    const session = Auth.createVerificationSession({
+      ...result.normalized,
+      coordinates
+    });
     session.source = "manual";
     session.paramKey = getSessionKey(result.normalized);
     saveSession(session);
     elements.verificationCode.value = "";
+    elements.verificationFeedback.textContent = "";
     render();
     notify("Validación creada", "Abre WhatsApp y envía el mensaje de autorización.", "success");
   }
@@ -419,6 +451,7 @@
     const payload = {
       phone: session.user.phoneE164,
       phoneDisplay: session.user.phoneDisplay,
+      coordinates: session.user.coordinates || "",
       authorizedAt: new Date(session.verifiedAt || Date.now()).toISOString(),
       source: session.source || "manual"
     };
