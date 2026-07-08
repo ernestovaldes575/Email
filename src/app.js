@@ -141,6 +141,13 @@
   }
 
   async function preloadCoordinates() {
+    if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      startupCoordinates = "";
+      setRegistrationReady(false);
+      elements.verificationFeedback.textContent = "La ubicacion requiere HTTPS o localhost. Abre esta pantalla desde un sitio seguro.";
+      return;
+    }
+
     const coordinates = await getBrowserCoordinates();
     if (isValidCoordinates(coordinates)) {
       startupCoordinates = coordinates;
@@ -202,7 +209,16 @@
           const longitude = Number(position.coords.longitude.toFixed(6));
           resolve(Auth.parseCoordinatesParam(`${latitude},${longitude}`));
         },
-        () => resolve(""),
+        (error) => {
+          if (error && error.code === error.PERMISSION_DENIED) {
+            elements.verificationFeedback.textContent = "Permite el acceso a ubicacion para continuar.";
+          } else if (error && error.code === error.TIMEOUT) {
+            elements.verificationFeedback.textContent = "La ubicacion tardo demasiado en responder. Intentalo de nuevo.";
+          } else {
+            elements.verificationFeedback.textContent = "No se pudo obtener la ubicacion del dispositivo.";
+          }
+          resolve("");
+        },
         {
           enableHighAccuracy: true,
           timeout: 8000,
