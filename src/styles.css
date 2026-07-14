@@ -35,21 +35,6 @@ body {
   max-width: 760px;
 }
 
-.spinner {
-  width: 72px;
-  height: 72px;
-  border-radius: 9999px;
-  border: 6px solid rgba(18, 140, 126, 0.14);
-  border-top-color: #128c7e;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 #demoCodeBlock,
 #copyMessageButton,
 #resendButton {
