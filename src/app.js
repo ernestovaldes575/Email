@@ -26,12 +26,16 @@
     accessPhone: document.getElementById("accessPhone"),
     accessCoordinates: document.getElementById("accessCoordinates"),
     accessTime: document.getElementById("accessTime"),
-    portalLink: document.getElementById("portalLink")
+    portalLink: document.getElementById("portalLink"),
+    redirectState: document.getElementById("redirectState"),
+    redirectCountdown: document.getElementById("redirectCountdown")
   };
 
   const externalLogin = Auth.parseExternalLoginParams(window.location.search);
   let currentSession = null;
   let countdownTimer = null;
+  let redirectTimer = null;
+  let redirectCountdownTimer = null;
   let startupCoordinates = "";
 
   currentSession = initializeSession();
@@ -294,6 +298,18 @@
     }
   }
 
+  function stopRedirectCountdown() {
+    if (redirectTimer) {
+      window.clearTimeout(redirectTimer);
+      redirectTimer = null;
+    }
+
+    if (redirectCountdownTimer) {
+      window.clearInterval(redirectCountdownTimer);
+      redirectCountdownTimer = null;
+    }
+  }
+
   function setPendingAvailability(isAvailable, hasReceiverPhone) {
     elements.verificationCode.disabled = !isAvailable;
     elements.whatsappLink.setAttribute("aria-disabled", String(!isAvailable || !hasReceiverPhone));
@@ -305,7 +321,9 @@
     setVisible(elements.emptyState, true);
     setVisible(elements.pendingState, false);
     setVisible(elements.accessState, false);
+    setVisible(elements.redirectState, false);
     stopCountdown();
+    stopRedirectCountdown();
 
     if (externalLogin.hasParams && !externalLogin.isValid) {
       const title = elements.emptyState.querySelector("h2");
@@ -332,6 +350,7 @@
     setVisible(elements.emptyState, false);
     setVisible(elements.pendingState, true);
     setVisible(elements.accessState, false);
+    setVisible(elements.redirectState, false);
 
     elements.summaryPhone.textContent = session.user.phoneDisplay;
     if (elements.demoCode) {
@@ -373,7 +392,9 @@
     setVisible(elements.emptyState, false);
     setVisible(elements.pendingState, false);
     setVisible(elements.accessState, true);
+    setVisible(elements.redirectState, false);
     stopCountdown();
+    stopRedirectCountdown();
 
     elements.accessPhone.textContent = session.user.phoneDisplay;
     elements.accessCoordinates.textContent = session.user.coordinates || "Sin coordenadas";
@@ -388,6 +409,47 @@
     });
   }
 
+  function renderRedirecting(session) {
+    setVisible(elements.emptyState, false);
+    setVisible(elements.pendingState, false);
+    setVisible(elements.accessState, false);
+    setVisible(elements.redirectState, true);
+    stopCountdown();
+    stopRedirectCountdown();
+
+    const targetUrl = Auth.buildPortalAccessUrl({
+      phone: session.user.phoneE164,
+      coordinates: session.user.coordinates,
+      includePhoneParam: true
+    });
+    const destination = targetUrl || elements.portalLink.href || Auth.DEFAULT_PORTAL_URL;
+    const start = 4;
+    let remaining = start;
+
+    const updateMessage = () => {
+      if (elements.redirectCountdown) {
+        elements.redirectCountdown.textContent = `Te llevamos en ${remaining} segundo${remaining === 1 ? "" : "s"}.`;
+      }
+    };
+
+    updateMessage();
+
+    redirectCountdownTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        stopRedirectCountdown();
+        window.location.href = destination;
+        return;
+      }
+
+      updateMessage();
+    }, 1000);
+
+    redirectTimer = window.setTimeout(() => {
+      window.location.href = destination;
+    }, start * 1000);
+  }
+
   function render() {
     if (!currentSession) {
       renderEmpty();
@@ -395,7 +457,7 @@
     }
 
     if (currentSession.status === "verified") {
-      renderAccess(currentSession);
+      renderRedirecting(currentSession);
       return;
     }
 
@@ -465,12 +527,7 @@
         ...result.session,
         accessSaved: savedAccess.ok
       });
-      render();
-      notify(
-        "Acceso autorizado",
-        savedAccess.ok ? "Numero guardado en JSON." : "Acceso autorizado. No se pudo guardar en JSON desde este servidor.",
-        savedAccess.ok ? "success" : "warning"
-      );
+      renderRedirecting(result.session);
       return;
     }
 
