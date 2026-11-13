@@ -137,3 +137,55 @@ body {
   height: 156px;
   width: 156px;
 }
+
+.debug-console {
+  width: 100%;
+  max-width: 1152px;
+  margin: 24px auto 0;
+  padding: 20px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.debug-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.debug-toolbar h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.debug-toolbar p,
+.debug-console > p,
+.debug-label {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.debug-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+#debugOutput {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #020617;
+  color: #a7f3d0;
+  font-family: Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+}

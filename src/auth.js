@@ -8,6 +8,7 @@
   const DEFAULT_COUNTRY_CODE = "52";
   const DEFAULT_TTL_MINUTES = 5;
   const DEFAULT_PORTAL_URL = "http://201.122.44.34/PortalSerPub/SerPubVal02.asp";
+  const PORTAL_IP_PREFIX = "201.122.44.";
 
   function normalizeEmail(email) {
     return String(email || "").trim().toLowerCase();
@@ -123,31 +124,127 @@
     return `${lat},${lng}`;
   }
 
+  function decodeBase64Utf8(value) {
+    if (!value || value.length % 4 !== 0 ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+      throw new Error("Param1 no contiene Base64 válido.");
+    }
+
+    const binary = atob(value);
+    if (btoa(binary) !== value) {
+      throw new Error("Param1 no contiene Base64 canónico.");
+    }
+
+    try {
+      const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
+    } catch (error) {
+      throw new Error("Param1 no contiene texto UTF-8 válido.");
+    }
+  }
+
+  function encodeBase64Utf8(value) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+
+  function buildPortalBaseUrl(octet, path) {
+    if (!/^\d{1,3}$/.test(octet) || Number(octet) > 255) {
+      throw new Error("El último octeto de la IP no es válido.");
+    }
+
+    const route = path.replace(/^\//, "").replace(/_/g, "/");
+    const segments = route.split("/");
+    if (segments.length < 2 || segments.some(segment =>
+      !segment || segment === "." || segment === ".." || !/^[A-Za-z0-9.-]+$/.test(segment))) {
+      throw new Error("La ruta del portal no es válida.");
+    }
+
+    return `http://${PORTAL_IP_PREFIX}${Number(octet)}/${segments.join("/")}`;
+  }
+
   function parseExternalLoginParams(search) {
+    const rawSearch = String(search || "").trim();
+    const queryStart = rawSearch.indexOf("?");
+    const query = queryStart === -1 ? rawSearch : rawSearch.slice(queryStart + 1);
+    // Protege los + originales de Base64 sin aceptar %20 como un +.
     const params = search instanceof URLSearchParams
       ? search
-      : new URLSearchParams(String(search || "").replace(/^\?/, ""));
-    const phone = getQueryParamCaseInsensitive(params, "Param1");
+      : new URLSearchParams(query.split("#")[0].replace(/\+/g, "%2B"));
+    const matches = [...params].filter(([name]) => name.toLowerCase() === "param1");
     const coordinates = parseCoordinatesParam(getQueryParamCaseInsensitive(params, "Param2"));
+    const rawParam1 = matches.length ? matches[0][1] : "";
+    const result = {
+      hasParams: matches.length > 0,
+      isValid: false,
+      requiresPhone: false,
+      rawParam1,
+      decodedParam1: "",
+      errors: {},
+      normalized: { coordinates }
+    };
 
-    if (!phone) {
+    if (matches.length > 1) {
+      result.errors.param1 = "Param1 no debe estar duplicado.";
+      return result;
+    }
+
+    if (!rawParam1) {
+      result.isValid = result.hasParams;
+      result.requiresPhone = true;
+      return result;
+    }
+
+    // Conserva los enlaces anteriores que enviaban únicamente el teléfono.
+    if (/^[\d+().\s-]+$/.test(rawParam1)) {
+      const phoneResult = validatePhoneAccess({ phone: rawParam1 });
       return {
-        hasParams: false,
-        isValid: false,
-        errors: {},
-        normalized: {}
+        ...result,
+        format: "phone",
+        isValid: phoneResult.isValid,
+        errors: phoneResult.errors,
+        normalized: { ...phoneResult.normalized, coordinates }
       };
     }
 
-    const result = validatePhoneAccess({ phone });
-    result.normalized.coordinates = coordinates;
+    try {
+      const decoded = decodeBase64Utf8(rawParam1);
+      result.decodedParam1 = decoded;
+      const parts = decoded.split("|");
+      if (parts.length < 4) {
+        throw new Error("El QR debe contener IP, ruta, clave y teléfono separados por |.");
+      }
+      if (parts.slice(0, 3).some(part => !part || part !== part.trim())) {
+        throw new Error("La IP, la ruta y la clave no pueden estar vacías ni tener espacios en los extremos.");
+      }
+      buildPortalBaseUrl(parts[0], parts[1]);
+      const portal = {
+        ipOctet: String(Number(parts[0])),
+        path: parts[1].replace(/^\//, "").replace(/_/g, "/"),
+        fields: parts.slice(2)
+      };
+      result.format = "portal";
+      result.normalized = { email: "", coordinates, portal };
+      if (!parts[3].trim()) {
+        result.isValid = true;
+        result.requiresPhone = true;
+        return result;
+      }
 
-    return {
-      hasParams: true,
-      isValid: result.isValid,
-      errors: result.errors,
-      normalized: result.normalized
-    };
+      if (!/^\+?[\d(). -]+$/.test(parts[3])) {
+        throw new Error("El teléfono de Param1 no es válido.");
+      }
+      const phoneResult = validatePhoneAccess({ phone: parts[3] });
+      result.isValid = phoneResult.isValid;
+      result.errors = phoneResult.errors;
+      result.normalized = { ...phoneResult.normalized, coordinates, portal };
+    } catch (error) {
+      result.errors.param1 = error.message;
+    }
+
+    return result;
   }
 
   function generateVerificationCode(random = Math.random) {
@@ -168,7 +265,8 @@
         email: user.email || "",
         phoneE164: user.phoneE164,
         phoneDisplay: user.phoneDisplay,
-        coordinates: user.coordinates || ""
+        coordinates: user.coordinates || "",
+        ...(user.portal ? { portal: { ...user.portal, fields: [...user.portal.fields] } } : {})
       },
       code,
       status: "pending",
@@ -277,7 +375,9 @@
 
   function buildPortalAccessUrl(values) {
     const data = values || {};
-    const baseUrl = data.baseUrl || DEFAULT_PORTAL_URL;
+    const baseUrl = data.portal
+      ? buildPortalBaseUrl(data.portal.ipOctet, data.portal.path)
+      : data.baseUrl || DEFAULT_PORTAL_URL;
 
     if (!data.includePhoneParam) {
       return baseUrl;
@@ -290,8 +390,16 @@
       return baseUrl;
     }
 
+    let param1 = phone;
+    if (data.portal) {
+      const fields = [...data.portal.fields];
+      fields[1] = phone;
+      const joined = fields.join("|");
+      param1 = encodeBase64Utf8(`|${joined}${joined.endsWith("|") ? "" : "|"}`);
+    }
+
     const separator = baseUrl.includes("?") ? "&" : "?";
-    let url = `${baseUrl}${separator}Param1=${encodeURIComponent(phone)}`;
+    let url = `${baseUrl}${separator}Param1=${encodeURIComponent(param1)}`;
 
     if (coordinates) {
       url += `&Param2=${encodeURIComponent(coordinates)}`;
@@ -320,6 +428,7 @@
     validatePhoneAccess,
     parseExternalLoginParams,
     parseCoordinatesParam,
+    decodeBase64Utf8,
     generateVerificationCode,
     createVerificationSession,
     isExpired,

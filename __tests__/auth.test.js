@@ -54,6 +54,82 @@ describe("AuthCore", () => {
   });
 
   describe("parseExternalLoginParams", () => {
+    const encode = value => Buffer.from(value, "utf8").toString("base64");
+    const portalQuery = value => `?Param1=${encodeURIComponent(encode(value))}`;
+
+    it("should decode the supplied URL and remove its UTF-8 BOM", () => {
+      const result = Auth.parseExternalLoginParams(
+        "https://simga.com.mx/Confirmacion/index.html?Param1=77u/MzR8UG9ydGFsU2VyUHViX1NlclB1YlZhbDAyLmFzcHwxMDV8NzIyMTQ4NDczOXw="
+      );
+
+      expect(result.isValid).toBe(true);
+      expect(result.requiresPhone).toBe(false);
+      expect(result.decodedParam1).toBe("34|PortalSerPub_SerPubVal02.asp|105|7221484739|");
+      expect(result.normalized.phoneE164).toBe("527221484739");
+      expect(result.normalized.portal).toEqual({
+        ipOctet: "34",
+        path: "PortalSerPub/SerPubVal02.asp",
+        fields: ["105", "7221484739", ""]
+      });
+    });
+
+    it.each(["", "   "])("should request phone registration for an empty phone field (%j)", phone => {
+      const result = Auth.parseExternalLoginParams(portalQuery(`34|PortalSerPub_SerPubVal02.asp|105|${phone}|`));
+
+      expect(result.isValid).toBe(true);
+      expect(result.requiresPhone).toBe(true);
+      expect(result.normalized.phoneE164).toBeUndefined();
+      expect(result.normalized.portal.fields[0]).toBe("105");
+    });
+
+    it("should not read a later data field as the missing phone", () => {
+      const result = Auth.parseExternalLoginParams(portalQuery("34|PortalSerPub_SerPubVal02.asp|105||1234567890|"));
+
+      expect(result.requiresPhone).toBe(true);
+      expect(result.normalized.portal.fields).toEqual(["105", "", "1234567890", ""]);
+    });
+
+    it("should accept raw and URL-encoded Base64 plus signs without accepting encoded spaces", () => {
+      const encoded = encode("34|PortalSerPub_SerPubVal02.asp|105|7221484739|>>>");
+      expect(encoded).toContain("+");
+      expect(Auth.parseExternalLoginParams(`?Param1=${encoded}`).isValid).toBe(true);
+      expect(Auth.parseExternalLoginParams(`?Param1=${encodeURIComponent(encoded)}`).isValid).toBe(true);
+      expect(Auth.parseExternalLoginParams(`?Param1=${encoded.replace(/\+/g, "%20")}`).isValid).toBe(false);
+    });
+
+    it.each([
+      "256|PortalSerPub_SerPubVal02.asp|105|7221484739|",
+      "34|PortalSerPub/../SerPubVal02.asp|105|7221484739|",
+      "34|https://otro.example/portal.asp|105|7221484739|",
+      "34|PortalSerPub/%2e%2e/portal.asp|105|7221484739|",
+      "34|PortalSerPub_SerPubVal02.asp||7221484739|",
+      "34|PortalSerPub_SerPubVal02.asp|105|abc7221484739|",
+      "34|PortalSerPub_SerPubVal02.asp|105|123|",
+      "34|PortalSerPub_SerPubVal02.asp|105"
+    ])("should reject a malformed portal payload: %s", payload => {
+      const result = Auth.parseExternalLoginParams(portalQuery(payload));
+      expect(result.isValid).toBe(false);
+      expect(Object.keys(result.errors).length).toBeGreaterThan(0);
+    });
+
+    it.each(["AB==", "/w==", "not-base64!"])("should reject invalid Base64 or UTF-8: %s", param1 => {
+      const result = Auth.parseExternalLoginParams(`?Param1=${encodeURIComponent(param1)}`);
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toHaveProperty("param1");
+    });
+
+    it("should reject duplicate Param1 even when letter case differs", () => {
+      const result = Auth.parseExternalLoginParams("?Param1=7221484739&PARAM1=5512345678");
+      expect(result.isValid).toBe(false);
+      expect(result.errors.param1).toContain("duplicado");
+    });
+
+    it("should request manual registration for an empty Param1", () => {
+      const result = Auth.parseExternalLoginParams("?Param1=");
+      expect(result.isValid).toBe(true);
+      expect(result.requiresPhone).toBe(true);
+    });
+
     it("should parse Param1 as the redirected phone number", () => {
       const result = Auth.parseExternalLoginParams(
         "?Param1=7221484739"
@@ -202,6 +278,54 @@ describe("AuthCore", () => {
   });
 
   describe("buildPortalAccessUrl", () => {
+    function parsePortal(payload) {
+      return Auth.parseExternalLoginParams(`?Param1=${encodeURIComponent(Buffer.from(payload, "utf8").toString("base64"))}`);
+    }
+
+    it("should return key and phone as Base64 to the destination supplied by Param1", () => {
+      const parsed = parsePortal("041|OtroPortal_Validar.aspx|105|7221484739|");
+      const url = new URL(Auth.buildPortalAccessUrl({
+        phone: parsed.normalized.phoneE164,
+        portal: parsed.normalized.portal,
+        includePhoneParam: true
+      }));
+
+      expect(url.origin).toBe("http://201.122.44.41");
+      expect(url.pathname).toBe("/OtroPortal/Validar.aspx");
+      expect(Buffer.from(url.searchParams.get("Param1"), "base64").toString("utf8")).toBe("|105|7221484739|");
+    });
+
+    it("should insert the manually registered phone and preserve extra fields and separators", () => {
+      const parsed = parsePortal("34|PortalSerPub_SerPubVal02.asp|105||año||dato-final||");
+      const session = Auth.createVerificationSession({
+        ...parsed.normalized,
+        ...Auth.normalizePhone("55 1234 5678"),
+        coordinates: "19.4326,-99.1332"
+      });
+      const url = new URL(Auth.buildPortalAccessUrl({
+        phone: session.user.phoneE164,
+        portal: session.user.portal,
+        coordinates: session.user.coordinates,
+        includePhoneParam: true
+      }));
+
+      expect(Buffer.from(url.searchParams.get("Param1"), "base64").toString("utf8"))
+        .toBe("|105|5512345678|año||dato-final||");
+      expect(url.searchParams.get("Param2")).toBe("19.4326,-99.1332");
+      expect(parsed.normalized.portal.fields[1]).toBe("");
+      expect(session.user.portal.fields[1]).toBe("");
+    });
+
+    it("should add the final separator when the incoming payload does not have one", () => {
+      const parsed = parsePortal("34|PortalSerPub_SerPubVal02.asp|105|7221484739");
+      const url = new URL(Auth.buildPortalAccessUrl({
+        phone: parsed.normalized.phoneE164,
+        portal: parsed.normalized.portal,
+        includePhoneParam: true
+      }));
+      expect(Buffer.from(url.searchParams.get("Param1"), "base64").toString("utf8")).toBe("|105|7221484739|");
+    });
+
     it("should append Param1 even when the number came from redirected parameters", () => {
       const url = Auth.buildPortalAccessUrl({
         phone: "527221484739",

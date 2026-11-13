@@ -35,17 +35,29 @@ Tambien puedes probar un destino puntual con `?wa=525512345678`. Por seguridad, 
 
 ## Redireccion desde login
 
-Despues de validar clave y contrasena en tu login, redirige a esta pantalla con el telefono en `Param1` y, si lo tienes, la ubicacion en `Param2`:
+El formato del QR envia `Param1` en Base64 con texto UTF-8. Se admite la marca BOM del enlace de origen. El contenido es:
+
+```text
+34|PortalSerPub_SerPubVal02.asp|105|7221484739|
+```
+
+Los campos son el ultimo octeto de `201.122.44.`, la ruta (cada `_` representa `/`), la clave y el telefono. Se conservan los campos adicionales y sus separadores.
+
+Con telefono, la pantalla pasa directo a autorizacion por WhatsApp. Si el campo del telefono esta vacio, por ejemplo `34|PortalSerPub_SerPubVal02.asp|105||`, se muestra el formulario para registrarlo. La IP, ruta y clave del QR se conservan durante la autorizacion.
+
+Ejemplo recibido:
+
+```text
+index.html?Param1=77u/MzR8UG9ydGFsU2VyUHViX1NlclB1YlZhbDAyLmFzcHwxMDV8NzIyMTQ4NDczOXw=
+```
+
+Se mantienen los enlaces anteriores que enviaban el telefono directamente en `Param1`:
 
 ```text
 index.html?Param1=7221484739&Param2=19.4326,-99.1332
 ```
 
-`Param1` es el telefono del usuario que inicio sesion. `Param2` acepta coordenadas en formato `lat,lng`.
-
-Si existe `Param1`, la pantalla oculta el formulario manual y pasa directo a autorizacion por WhatsApp.
-
-Si no llega `Param1`, la pantalla muestra un campo para capturar el telefono manualmente.
+`Param2` acepta coordenadas en formato `lat,lng`. Si no llegan, se solicita la ubicacion al navegador, como en el flujo manual. Sin `Param1` o con `Param1` vacio, tambien se permite registrar el telefono manualmente. Un `Param1` malformado o duplicado muestra un error y no crea una sesion.
 
 ## Guardar accesos
 
@@ -57,13 +69,21 @@ data/accesos.json
 
 En hosting PHP, asegúrate de que la carpeta `data` tenga permisos de escritura para PHP.
 
-Despues de verificar correctamente, aparece un boton `Continuar` hacia:
+Despues de verificar correctamente, los enlaces nuevos apuntan al ASP indicado por el QR. Se envia en Base64 `|clave|telefono|dato1|...|`, reemplazando el campo vacio por el telefono validado, sin el prefijo mexicano `52`. Por ejemplo, `|105|7221484739|` produce:
 
 ```text
-http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=7221484739
+http://201.122.44.34/PortalSerPub/SerPubVal02.asp?Param1=fDEwNXw3MjIxNDg0NzM5fA%3D%3D
 ```
 
-Siempre se envia `Param1` con el telefono validado, y si venian coordenadas en `Param2`, tambien se conservan al guardar el acceso y al construir el enlace al portal.
+Los enlaces anteriores y el registro sin QR siguen enviando el telefono directamente en `Param1`. Las coordenadas se conservan en `Param2` del enlace al portal.
+
+## Consola visible de prueba
+
+`debugConsole: true` en `src/config.js` activa la consola al final de la pantalla. Muestra el parametro recibido, su contenido decodificado, errores, registro del telefono, resultado del guardado local y enlace preparado para ASP. El boton `Copiar diagnostico` permite enviarlo al desarrollador; si el navegador no ofrece acceso al portapapeles, selecciona el texto para copiarlo manualmente.
+
+En este modo, despues de autorizar se muestra `Continuar` para poder revisar y copiar la consola antes de navegar al ASP. La consola indica que el enlace esta preparado; no implica que el ASP ya haya respondido.
+
+Para ocultar la consola y volver a la redireccion automatica despues de autorizar, cambia `debugConsole` a `false`.
 
 ## Pruebas
 

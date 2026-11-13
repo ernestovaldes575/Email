@@ -2,11 +2,13 @@
   const Auth = window.AuthCore;
   const STORAGE_KEY = "whatsapp-login-demo:session";
   const runtimeConfig = window.WHATSAPP_LOGIN_CONFIG || {};
+  const debugEnabled = runtimeConfig.debugConsole === true;
 
   const elements = {
     appShell: document.getElementById("appShell"),
     registrationForm: document.getElementById("registrationForm"),
     registrationSubmit: document.getElementById("registrationSubmit"),
+    registrationFeedback: document.getElementById("registrationFeedback"),
     phone: document.getElementById("phone"),
     emptyState: document.getElementById("emptyState"),
     pendingState: document.getElementById("pendingState"),
@@ -26,18 +28,73 @@
     accessPhone: document.getElementById("accessPhone"),
     accessCoordinates: document.getElementById("accessCoordinates"),
     accessTime: document.getElementById("accessTime"),
-    portalLink: document.getElementById("portalLink")
+    portalLink: document.getElementById("portalLink"),
+    debugConsole: document.getElementById("debugConsole"),
+    debugOutput: document.getElementById("debugOutput"),
+    copyDebugButton: document.getElementById("copyDebugButton"),
+    debugCopyStatus: document.getElementById("debugCopyStatus")
   };
 
   const externalLogin = Auth.parseExternalLoginParams(window.location.search);
   let currentSession = null;
   let countdownTimer = null;
-  let startupCoordinates = "";
+  let startupCoordinates = externalLogin.normalized.coordinates || "";
+  const diagnosticEntries = [];
+
+  setVisible(elements.debugConsole, debugEnabled);
+  logDiagnostic("Inicio", { url: window.location.href, navegador: navigator.userAgent });
+  logDiagnostic("Lectura de Param1", {
+    recibido: externalLogin.rawParam1,
+    decodificado: externalLogin.decodedParam1,
+    formato: externalLogin.format || "sin datos",
+    requiereTelefono: externalLogin.requiresPhone,
+    portal: externalLogin.normalized.portal || null,
+    errores: externalLogin.errors
+  });
+  window.addEventListener("error", event => {
+    logDiagnostic("Error de JavaScript", { mensaje: event.message, archivo: event.filename, linea: event.lineno });
+  });
+  window.addEventListener("unhandledrejection", event => {
+    logDiagnostic("Error asíncrono", { mensaje: String(event.reason && event.reason.message || event.reason) });
+  });
 
   currentSession = initializeSession();
 
   function getSessionKey(user) {
-    return user.phoneE164;
+    return JSON.stringify({
+      phone: user.phoneE164,
+      coordinates: user.coordinates || "",
+      portal: user.portal || null
+    });
+  }
+
+  function logDiagnostic(message, details) {
+    if (!debugEnabled) return;
+    const entry = `[${new Date().toISOString()}] ${message}`;
+    diagnosticEntries.push(details === undefined ? entry : `${entry}\n${JSON.stringify(details, null, 2)}`);
+    if (diagnosticEntries.length > 80) diagnosticEntries.shift();
+    elements.debugOutput.value = diagnosticEntries.join("\n\n");
+    elements.debugOutput.scrollTop = elements.debugOutput.scrollHeight;
+  }
+
+  async function handleCopyDiagnostics() {
+    try {
+      await navigator.clipboard.writeText(elements.debugOutput.value);
+      elements.debugCopyStatus.textContent = "Diagnóstico copiado. Ya puedes enviarlo al desarrollador.";
+    } catch (error) {
+      elements.debugOutput.focus();
+      elements.debugOutput.select();
+      elements.debugCopyStatus.textContent = "Texto seleccionado. Usa Copiar en tu dispositivo o Ctrl+C.";
+    }
+  }
+
+  function getPortalUrl(session) {
+    return Auth.buildPortalAccessUrl({
+      phone: session.user.phoneE164,
+      coordinates: session.user.coordinates,
+      portal: session.user.portal,
+      includePhoneParam: true
+    });
   }
 
   function initializeSession() {
@@ -47,7 +104,7 @@
       return null;
     }
 
-    if (!externalLogin.isValid) {
+    if (!externalLogin.isValid || externalLogin.requiresPhone) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
@@ -60,6 +117,7 @@
       !Auth.isExpired(storedSession);
 
     if (canReuseStoredSession) {
+      logDiagnostic("Sesión vigente recuperada", { telefono: storedSession.user.phoneE164, estado: storedSession.status });
       return storedSession;
     }
 
@@ -67,20 +125,17 @@
     session.source = "external-login";
     session.paramKey = paramKey;
     saveSession(session);
+    logDiagnostic("Autorización creada desde Param1", { telefono: session.user.phoneE164 });
     return session;
   }
 
   function applyStartupMode() {
-    if (!externalLogin.hasParams) {
-      return;
-    }
+    const showRegistration = !currentSession &&
+      (!externalLogin.hasParams || (externalLogin.isValid && externalLogin.requiresPhone));
+    setVisible(elements.registrationForm, showRegistration);
+    elements.appShell.classList.toggle("authorization-only", !showRegistration);
 
-    elements.registrationForm.classList.add("hidden");
-    elements.resendButton.classList.add("hidden");
-    elements.appShell.classList.add("authorization-only");
-    setRegistrationReady(false);
-
-    if (externalLogin.isValid) {
+    if (externalLogin.isValid && !externalLogin.requiresPhone) {
       elements.phone.value = externalLogin.normalized.phoneDisplay;
     }
   }
@@ -140,25 +195,45 @@
     }
   }
 
+  function setLocationFeedback(message) {
+    elements.registrationFeedback.textContent = message;
+    elements.verificationFeedback.textContent = message;
+  }
+
   async function preloadCoordinates() {
+    if (isValidCoordinates(startupCoordinates)) {
+      setRegistrationReady(true);
+      setLocationFeedback("Ubicación recibida. Ya puedes verificar.");
+      logDiagnostic("Ubicación recibida en Param2", { coordenadas: startupCoordinates });
+      return;
+    }
+
     if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
       startupCoordinates = "";
       setRegistrationReady(false);
-      elements.verificationFeedback.textContent = "La ubicacion requiere HTTPS o localhost. Abre esta pantalla desde un sitio seguro.";
+      setLocationFeedback("La ubicación requiere HTTPS o localhost. Abre esta pantalla desde un sitio seguro.");
+      logDiagnostic("Ubicación no disponible", { motivo: "Se requiere HTTPS o localhost" });
       return;
     }
 
     const coordinates = await getBrowserCoordinates();
     if (isValidCoordinates(coordinates)) {
       startupCoordinates = coordinates;
+      if (currentSession && !isValidCoordinates(currentSession.user.coordinates)) {
+        saveSession({
+          ...currentSession,
+          user: { ...currentSession.user, coordinates }
+        });
+      }
       setRegistrationReady(true);
-      elements.verificationFeedback.textContent = "Ubicacion capturada. Ya puedes verificar.";
+      setLocationFeedback("Ubicación capturada. Ya puedes verificar.");
+      logDiagnostic("Ubicación capturada", { coordenadas: startupCoordinates });
       return;
     }
 
     startupCoordinates = "";
     setRegistrationReady(false);
-    elements.verificationFeedback.textContent = "La ubicacion es obligatoria. Permite el acceso para continuar.";
+    setLocationFeedback("La ubicación es obligatoria. Permite el acceso para continuar.");
   }
 
   function showFieldErrors(errors) {
@@ -199,6 +274,7 @@
 
   function getBrowserCoordinates() {
     if (!navigator.geolocation) {
+      logDiagnostic("Ubicación no disponible", { motivo: "El navegador no ofrece geolocalización" });
       return Promise.resolve("");
     }
 
@@ -210,6 +286,7 @@
           resolve(Auth.parseCoordinatesParam(`${latitude},${longitude}`));
         },
         (error) => {
+          logDiagnostic("Error de ubicación", { codigo: error && error.code, mensaje: error && error.message });
           if (error && error.code === error.PERMISSION_DENIED) {
             elements.verificationFeedback.textContent = "Permite el acceso a ubicacion para continuar.";
           } else if (error && error.code === error.TIMEOUT) {
@@ -316,8 +393,11 @@
       }
 
       if (copy) {
-        copy.textContent = "Param1 debe ser un telefono valido.";
+        copy.textContent = Object.values(externalLogin.errors).join(" ") || "Param1 no es válido.";
       }
+    } else if (externalLogin.requiresPhone && externalLogin.format === "portal") {
+      elements.emptyState.querySelector("h2").textContent = "Registra tu número telefónico";
+      elements.emptyState.querySelector("p").textContent = "El enlace no incluye un teléfono. Captúralo para autorizar el acceso y enviarlo al portal.";
     }
   }
 
@@ -379,25 +459,30 @@
       dateStyle: "medium",
       timeStyle: "short"
     }).format(new Date(session.verifiedAt || Date.now()));
-    elements.portalLink.href = Auth.buildPortalAccessUrl({
-      phone: session.user.phoneE164,
-      coordinates: session.user.coordinates,
-      includePhoneParam: true
+    const portalUrl = getPortalUrl(session);
+    elements.portalLink.href = portalUrl;
+    const param1 = new URL(portalUrl).searchParams.get("Param1");
+    logDiagnostic("Enlace al servidor ASP preparado; pendiente de Continuar", {
+      url: portalUrl,
+      param1,
+      param1Decodificado: session.user.portal ? Auth.decodeBase64Utf8(param1) : param1,
+      coordenadas: session.user.coordinates || ""
     });
   }
 
   function render() {
+    applyStartupMode();
     if (!currentSession) {
       renderEmpty();
       return;
     }
 
     if (currentSession.status === "verified") {
-      window.location.href = Auth.buildPortalAccessUrl({
-        phone: currentSession.user.phoneE164,
-        coordinates: currentSession.user.coordinates,
-        includePhoneParam: true
-      });
+      if (debugEnabled) {
+        renderAccess(currentSession);
+      } else {
+        window.location.href = getPortalUrl(currentSession);
+      }
       return;
     }
 
@@ -417,16 +502,17 @@
 
     if (!result.isValid) {
       showFieldErrors(result.errors);
+      logDiagnostic("Teléfono capturado no válido", result.errors);
       return;
     }
 
     clearFieldErrors();
     setRegistrationReady(false);
-    elements.verificationFeedback.textContent = "Obteniendo ubicacion del dispositivo...";
-    const coordinates = result.normalized.coordinates || startupCoordinates || await getBrowserCoordinates();
+    setLocationFeedback("Obteniendo ubicación del dispositivo...");
+    const coordinates = externalLogin.normalized.coordinates || startupCoordinates || await getBrowserCoordinates();
 
     if (!isValidCoordinates(coordinates)) {
-      elements.verificationFeedback.textContent = "La ubicacion es obligatoria. Activa el GPS o permite el acceso a ubicacion para continuar.";
+      setLocationFeedback("La ubicación es obligatoria. Activa el GPS o permite el acceso a ubicación para continuar.");
       setRegistrationReady(true);
       notify(
         "Ubicacion requerida",
@@ -438,11 +524,17 @@
 
     const session = Auth.createVerificationSession({
       ...result.normalized,
-      coordinates
+      coordinates,
+      portal: externalLogin.normalized.portal
     });
     session.source = "manual";
     session.paramKey = getSessionKey(result.normalized);
     saveSession(session);
+    logDiagnostic("Teléfono registrado para autorización", {
+      telefono: session.user.phoneE164,
+      coordenadas: coordinates,
+      portal: session.user.portal || null
+    });
     elements.verificationCode.value = "";
     elements.verificationFeedback.textContent = "";
     setRegistrationReady(true);
@@ -459,6 +551,7 @@
 
     const result = Auth.verifyCode(currentSession, elements.verificationCode.value);
     saveSession(result.session);
+    logDiagnostic("Resultado de verificación", { correcto: result.ok, motivo: result.reason });
 
     if (result.ok) {
       const savedAccess = await saveAuthorizedAccess(result.session);
@@ -467,11 +560,7 @@
         ...result.session,
         accessSaved: savedAccess.ok
       });
-      window.location.href = Auth.buildPortalAccessUrl({
-        phone: result.session.user.phoneE164,
-        coordinates: result.session.user.coordinates,
-        includePhoneParam: true
-      });
+      render();
       return;
     }
 
@@ -512,6 +601,7 @@
       source: session.source || "manual"
     };
 
+    logDiagnostic("Guardando acceso", { endpoint: "guardar-acceso.php", metodo: "POST", datos: payload });
     try {
       const response = await fetch("guardar-acceso.php", {
         method: "POST",
@@ -520,6 +610,7 @@
         },
         body: JSON.stringify(payload)
       });
+      logDiagnostic("Respuesta de guardar acceso", { http: response.status, correcto: response.ok });
 
       if (!response.ok) {
         throw new Error("SAVE_FAILED");
@@ -527,6 +618,7 @@
 
       return { ok: true };
     } catch (error) {
+      logDiagnostic("No se pudo guardar el acceso; se conserva copia local", { mensaje: error.message });
       localStorage.setItem("whatsapp-login-demo:last-access", JSON.stringify(payload));
       return { ok: false, error };
     }
@@ -538,18 +630,22 @@
     }
 
     const nextSession = Auth.createVerificationSession(currentSession.user);
+    nextSession.source = currentSession.source;
+    nextSession.paramKey = currentSession.paramKey;
     saveSession(nextSession);
     elements.verificationCode.value = "";
     render();
     notify("Nuevo código generado", "El código anterior ya no debe usarse.", "success");
   }
 
-  applyStartupMode();
-
   elements.registrationForm.addEventListener("submit", handleRegistrationSubmit);
   elements.verificationForm.addEventListener("submit", handleVerificationSubmit);
   elements.copyMessageButton.addEventListener("click", handleCopyMessage);
   elements.resendButton.addEventListener("click", handleResend);
+  elements.copyDebugButton.addEventListener("click", handleCopyDiagnostics);
+  elements.portalLink.addEventListener("click", () => {
+    logDiagnostic("Navegando al servidor ASP", { url: elements.portalLink.href });
+  });
 
   if (window.lucide) {
     window.lucide.createIcons();

@@ -24,7 +24,7 @@
       };
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="src/styles.css?v=20260629-3" />
+    <link rel="stylesheet" href="src/styles.css?v=20261113-1" />
   </head>
   <body class="min-h-screen bg-surface text-slate-900">
     <main class="min-h-screen overflow-x-hidden px-4 py-5 sm:px-6 lg:px-8">
@@ -63,6 +63,7 @@
               <i data-lucide="shield-check" class="h-5 w-5"></i>
               Verificar
             </button>
+            <p id="registrationFeedback" role="status" class="text-sm text-slate-600">Permite el acceso a tu ubicación para continuar.</p>
           </div>
         </form>
 
@@ -182,13 +183,26 @@
 
         </section>
       </section>
+
+      <section id="debugConsole" class="debug-console hidden" aria-labelledby="debugTitle">
+        <div class="debug-toolbar">
+          <div>
+            <h2 id="debugTitle">Consola de prueba</h2>
+            <p>Copia el diagnóstico y envíalo al desarrollador. Incluye los datos recibidos y el enlace al ASP.</p>
+          </div>
+          <button id="copyDebugButton" type="button" class="btn-secondary">Copiar diagnóstico</button>
+        </div>
+        <label class="debug-label" for="debugOutput">Diagnóstico de esta prueba</label>
+        <textarea id="debugOutput" readonly spellcheck="false" rows="12"></textarea>
+        <p id="debugCopyStatus" role="status">Después de autorizar, revisa el diagnóstico y presiona Continuar para abrir el portal.</p>
+      </section>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="src/auth.js?v=20260806-1"></script>
-    <script src="src/config.js?v=20260629-3"></script>
-    <script src="src/app.js?v=20260806-1"></script>
+    <script src="src/auth.js?v=20261113-1"></script>
+    <script src="src/config.js?v=20261113-1"></script>
+    <script src="src/app.js?v=20261113-1"></script>
   </body>
 </html>
