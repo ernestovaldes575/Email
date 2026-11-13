@@ -7,7 +7,6 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const DEFAULT_COUNTRY_CODE = "52";
   const DEFAULT_TTL_MINUTES = 5;
-  const DEFAULT_MAX_ATTEMPTS = 3;
   const DEFAULT_PORTAL_URL = "http://201.122.44.34/PortalSerPub/SerPubVal02.asp";
 
   function normalizeEmail(email) {
@@ -174,7 +173,6 @@
       code,
       status: "pending",
       attempts: 0,
-      maxAttempts: Number(opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS),
       createdAt: now,
       expiresAt: now + ttlMinutes * 60 * 1000
     };
@@ -191,13 +189,15 @@
       ...session,
       user: { ...session.user }
     };
-    const maxAttempts = Number(opts.maxAttempts ?? nextSession.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+    // Reactiva sesiones no vencidas que hayan sido bloqueadas por una version anterior.
+    if (nextSession.status === "blocked") {
+      nextSession.status = "pending";
+    }
 
     if (nextSession.status === "verified") {
       return {
         ok: true,
         reason: "already_verified",
-        remainingAttempts: Math.max(maxAttempts - nextSession.attempts, 0),
         session: nextSession
       };
     }
@@ -207,17 +207,6 @@
       return {
         ok: false,
         reason: "expired",
-        remainingAttempts: Math.max(maxAttempts - nextSession.attempts, 0),
-        session: nextSession
-      };
-    }
-
-    if (nextSession.status === "blocked" || nextSession.attempts >= maxAttempts) {
-      nextSession.status = "blocked";
-      return {
-        ok: false,
-        reason: "blocked",
-        remainingAttempts: 0,
         session: nextSession
       };
     }
@@ -230,27 +219,15 @@
       return {
         ok: true,
         reason: "verified",
-        remainingAttempts: Math.max(maxAttempts - nextSession.attempts, 0),
         session: nextSession
       };
     }
 
     nextSession.attempts += 1;
 
-    if (nextSession.attempts >= maxAttempts) {
-      nextSession.status = "blocked";
-      return {
-        ok: false,
-        reason: "blocked",
-        remainingAttempts: 0,
-        session: nextSession
-      };
-    }
-
     return {
       ok: false,
       reason: "invalid_code",
-      remainingAttempts: maxAttempts - nextSession.attempts,
       session: nextSession
     };
   }
@@ -334,7 +311,6 @@
   return {
     DEFAULT_COUNTRY_CODE,
     DEFAULT_TTL_MINUTES,
-    DEFAULT_MAX_ATTEMPTS,
     DEFAULT_PORTAL_URL,
     normalizeEmail,
     isValidEmail,

@@ -322,9 +322,12 @@
   }
 
   function renderPending(session) {
+    if (session.status === "blocked") {
+      session = saveSession({ ...session, status: "pending" });
+    }
+
     const expired = session.status === "expired" || Auth.isExpired(session);
-    const blocked = session.status === "blocked";
-    const available = !expired && !blocked;
+    const available = !expired;
     const receiverPhone = getReceiverPhoneForSession(session);
     const authUrl = Auth.buildWhatsAppAuthorizationUrl(getAuthorizationPayload(session));
     const hasReceiverPhone = Boolean(receiverPhone);
@@ -338,19 +341,14 @@
       elements.demoCode.textContent = "";
     }
     elements.whatsappLink.href = authUrl || "#";
-    elements.verificationFeedback.textContent = blocked
-      ? "Se agotaron los intentos. Genera un nuevo código."
-      : expired
+    elements.verificationFeedback.textContent = expired
         ? "El código expiró. Genera uno nuevo para continuar."
         : hasReceiverPhone
-          ? `Intentos disponibles: ${session.maxAttempts - session.attempts}`
+          ? "Puedes intentar las veces necesarias mientras el código esté vigente."
           : "Captura un telefono valido para abrir un chat directo.";
 
     elements.statusBadge.className = "inline-flex w-fit items-center gap-2 rounded-full px-3 py-1 text-sm font-medium";
-    if (blocked) {
-      elements.statusBadge.classList.add("bg-red-100", "text-red-700");
-      elements.statusBadge.innerHTML = '<span class="h-2 w-2 rounded-full bg-red-500"></span> Bloqueado';
-    } else if (expired) {
+    if (expired) {
       elements.statusBadge.classList.add("bg-slate-100", "text-slate-700");
       elements.statusBadge.innerHTML = '<span class="h-2 w-2 rounded-full bg-slate-500"></span> Expirado';
     } else {
@@ -480,17 +478,13 @@
     render();
 
     if (result.reason === "invalid_code") {
-      elements.verificationFeedback.textContent = `Código incorrecto. Intentos disponibles: ${result.remainingAttempts}`;
+      elements.verificationFeedback.textContent = "Código incorrecto. Puedes volver a intentarlo.";
       return;
     }
 
     if (result.reason === "expired") {
       notify("Código expirado", "Genera un nuevo código para continuar.", "warning");
       return;
-    }
-
-    if (result.reason === "blocked") {
-      notify("Validación bloqueada", "Se agotaron los intentos disponibles.", "error");
     }
   }
 

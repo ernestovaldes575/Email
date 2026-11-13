@@ -130,20 +130,38 @@ describe("AuthCore", () => {
       expect(result.session.status).toBe("expired");
     });
 
-    it("should block after the configured maximum attempts", () => {
+    it("should allow repeated attempts without blocking until expiration", () => {
       const session = Auth.createVerificationSession(baseUser, {
         now: 1000,
-        code: "123456",
-        maxAttempts: 2
+        code: "123456"
       });
 
-      const firstTry = Auth.verifyCode(session, "000000", { now: 2000 });
-      const secondTry = Auth.verifyCode(firstTry.session, "111111", { now: 3000 });
+      let lastTry = session;
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const result = Auth.verifyCode(lastTry, "000000", { now: 2000 + attempt });
+        expect(result.reason).toBe("invalid_code");
+        expect(result.session.status).toBe("pending");
+        lastTry = result.session;
+      }
 
-      expect(firstTry.reason).toBe("invalid_code");
-      expect(secondTry.reason).toBe("blocked");
-      expect(secondTry.session.status).toBe("blocked");
-      expect(secondTry.remainingAttempts).toBe(0);
+      const validTry = Auth.verifyCode(lastTry, "123456", { now: 3000 });
+      expect(validTry.ok).toBe(true);
+      expect(validTry.session.status).toBe("verified");
+      expect(validTry.session.attempts).toBe(10);
+    });
+
+    it("should reactivate a non-expired session blocked by an older version", () => {
+      const session = Auth.createVerificationSession(baseUser, {
+        now: 1000,
+        code: "123456"
+      });
+      session.status = "blocked";
+      session.attempts = 3;
+
+      const result = Auth.verifyCode(session, "123456", { now: 2000 });
+
+      expect(result.ok).toBe(true);
+      expect(result.session.status).toBe("verified");
     });
   });
 
