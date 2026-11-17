@@ -61,7 +61,7 @@ index.html?Param1=7221484739&Param2=19.4326,-99.1332
 
 ## Guardar accesos
 
-Al presionar `Accesar` con el codigo correcto, la app envia el telefono a `guardar-acceso.php`. Ese archivo guarda los accesos en:
+Al presionar `Accesar` con el codigo correcto, la app abre automaticamente la pantalla de destino. El telefono se envia en segundo plano a `guardar-acceso.php`, sin retrasar la redireccion, y se conserva una copia local del ultimo acceso. Ese archivo guarda los accesos en:
 
 ```text
 data/accesos.json
@@ -81,9 +81,9 @@ Los enlaces anteriores y el registro sin QR siguen enviando el telefono directam
 
 `debugConsole: true` en `src/config.js` activa la consola al final de la pantalla. Muestra el parametro recibido, su contenido decodificado, errores, registro del telefono, resultado del guardado local y enlace preparado para ASP. El boton `Copiar diagnostico` permite enviarlo al desarrollador; si el navegador no ofrece acceso al portapapeles, selecciona el texto para copiarlo manualmente.
 
-En este modo, despues de autorizar se muestra `Continuar` para poder revisar y copiar la consola antes de navegar al ASP. La consola indica que el enlace esta preparado; no implica que el ASP ya haya respondido.
+La redireccion al ASP es automatica al validar el codigo, incluso con la consola activada. El diagnostico muestra el enlace de destino; no implica que el ASP ya haya respondido.
 
-Para ocultar la consola y volver a la redireccion automatica despues de autorizar, cambia `debugConsole` a `false`.
+Para ocultar la consola, cambia `debugConsole` a `false`.
 
 ## Pruebas
 

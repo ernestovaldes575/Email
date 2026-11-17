@@ -63,7 +63,7 @@ async function openScreen(search, options = {}) {
     setInterval: jest.fn(() => 1), clearInterval: jest.fn(),
     Swal: { fire: jest.fn() }
   };
-  const fetch = jest.fn().mockResolvedValue({ ok: !options.saveFailed, status: options.saveFailed ? 500 : 200 });
+  const fetch = options.fetch || jest.fn().mockResolvedValue({ ok: !options.saveFailed, status: options.saveFailed ? 500 : 200 });
   vm.runInNewContext(appSource, {
     window, navigator, location, fetch, URL, URLSearchParams,
     document: {
@@ -99,7 +99,7 @@ describe("Flujo de confirmación del portal", () => {
     expect(screen.session.user.coordinates).toBe("19.4326,-99.1332");
   });
 
-  it("should register the missing phone, save access and prepare the ASP link with the original key", async () => {
+  it("should register the missing phone, save access and redirect to the ASP with the original key", async () => {
     const screen = await openScreen(queryFor("34|PortalSerPub_SerPubVal02.asp|105||extra||"));
 
     expect(screen.elements.registrationForm.classList.contains("hidden")).toBe(false);
@@ -125,22 +125,72 @@ describe("Flujo de confirmación del portal", () => {
     expect(Buffer.from(target.searchParams.get("Param1"), "base64").toString("utf8"))
       .toBe("|105|5512345678|extra||");
     expect(target.searchParams.get("Param2")).toBe("19.4326,-99.1332");
-    expect(screen.location.href).toMatch(/^http:\/\/localhost\//);
-    expect(screen.elements.debugOutput.value).toContain("pendiente de Continuar");
+    expect(screen.location.href).toBe(target.href);
+    expect(screen.elements.debugOutput.value).toContain("Redirigiendo al servidor ASP");
     expect(screen.elements.debugOutput.value).toContain("|105|5512345678|extra||");
   });
 
-  it("should redirect automatically when the test console is disabled", async () => {
-    const screen = await openScreen(`?Param1=${suppliedParam1}`, { debug: false });
+  it.each([true, false])("should redirect automatically to the QR destination with debugConsole=%s", async debug => {
+    const screen = await openScreen(queryFor("41|OtroPortal_Validar.aspx|909|7221484739|"), { debug });
     screen.elements.verificationCode.value = screen.session.code;
     await screen.trigger("verificationForm", "submit");
 
     const target = new URL(screen.location.href);
-    expect(target.origin).toBe("http://201.122.44.34");
+    expect(target.origin).toBe("http://201.122.44.41");
+    expect(target.pathname).toBe("/OtroPortal/Validar.aspx");
     expect(Buffer.from(target.searchParams.get("Param1"), "base64").toString("utf8"))
-      .toBe("|105|7221484739|");
-    expect(screen.elements.debugConsole.classList.contains("hidden")).toBe(true);
-    expect(screen.elements.debugOutput.value).toBe("");
+      .toBe("|909|7221484739|");
+    expect(target.searchParams.get("Param2")).toBe("19.4326,-99.1332");
+    expect(screen.elements.debugConsole.classList.contains("hidden")).toBe(!debug);
+    if (!debug) expect(screen.elements.debugOutput.value).toBe("");
+  });
+
+  it("should redirect immediately while the access log is still being saved", async () => {
+    let finishSaving;
+    const fetch = jest.fn(() => new Promise(resolve => { finishSaving = resolve; }));
+    const screen = await openScreen(`?Param1=${suppliedParam1}`, { fetch });
+    screen.elements.verificationCode.value = screen.session.code;
+
+    const verification = screen.trigger("verificationForm", "submit");
+
+    expect(screen.location.href).toBe(screen.elements.portalLink.href);
+    expect(new URL(screen.location.href).origin).toBe("http://201.122.44.34");
+    expect(screen.session.status).toBe("verified");
+    expect(screen.session.accessSaved).toBeUndefined();
+    expect(JSON.parse(screen.storage.get("whatsapp-login-demo:last-access"))).toMatchObject({
+      phone: "527221484739", coordinates: "19.4326,-99.1332"
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: "POST", keepalive: true });
+
+    finishSaving({ ok: true, status: 200 });
+    await verification;
+    expect(screen.session.accessSaved).toBe(true);
+  });
+
+  it("should stay on verification and skip saving when the code is incorrect", async () => {
+    const screen = await openScreen(`?Param1=${suppliedParam1}`);
+    const originalUrl = screen.location.href;
+    screen.elements.verificationCode.value = screen.session.code === "000000" ? "111111" : "000000";
+
+    await screen.trigger("verificationForm", "submit");
+
+    expect(screen.location.href).toBe(originalUrl);
+    expect(screen.session.status).toBe("pending");
+    expect(screen.elements.verificationFeedback.textContent).toContain("Código incorrecto");
+    expect(screen.fetch).not.toHaveBeenCalled();
+  });
+
+  it("should redirect a recovered verified session without requesting another code or saving twice", async () => {
+    const first = await openScreen(`?Param1=${suppliedParam1}`);
+    first.elements.verificationCode.value = first.session.code;
+    await first.trigger("verificationForm", "submit");
+
+    const recovered = await openScreen(`?Param1=${suppliedParam1}`, { storage: first.storage });
+
+    expect(recovered.location.href).toBe(first.location.href);
+    expect(recovered.session.status).toBe("verified");
+    expect(recovered.fetch).not.toHaveBeenCalled();
   });
 
   it("should display malformed input instead of allowing a default portal session", async () => {
@@ -185,13 +235,14 @@ describe("Flujo de confirmación del portal", () => {
     expect(screen.elements.debugOutput.value).toContain("Permiso denegado");
   });
 
-  it("should keep the ASP link available and log a local save failure", async () => {
+  it("should redirect to the ASP and keep a local copy when saving fails", async () => {
     const screen = await openScreen(`?Param1=${suppliedParam1}`, { saveFailed: true });
     screen.elements.verificationCode.value = screen.session.code;
     await screen.trigger("verificationForm", "submit");
     expect(screen.session.accessSaved).toBe(false);
     expect(screen.storage.has("whatsapp-login-demo:last-access")).toBe(true);
     expect(screen.elements.portalLink.href).toContain("/PortalSerPub/SerPubVal02.asp?Param1=");
+    expect(screen.location.href).toBe(screen.elements.portalLink.href);
     expect(screen.elements.debugOutput.value).toContain("No se pudo guardar");
   });
 });

@@ -462,7 +462,7 @@
     const portalUrl = getPortalUrl(session);
     elements.portalLink.href = portalUrl;
     const param1 = new URL(portalUrl).searchParams.get("Param1");
-    logDiagnostic("Enlace al servidor ASP preparado; pendiente de Continuar", {
+    logDiagnostic("Redirigiendo al servidor ASP", {
       url: portalUrl,
       param1,
       param1Decodificado: session.user.portal ? Auth.decodeBase64Utf8(param1) : param1,
@@ -478,11 +478,8 @@
     }
 
     if (currentSession.status === "verified") {
-      if (debugEnabled) {
-        renderAccess(currentSession);
-      } else {
-        window.location.href = getPortalUrl(currentSession);
-      }
+      renderAccess(currentSession);
+      window.location.href = elements.portalLink.href;
       return;
     }
 
@@ -554,13 +551,14 @@
     logDiagnostic("Resultado de verificación", { correcto: result.ok, motivo: result.reason });
 
     if (result.ok) {
-      const savedAccess = await saveAuthorizedAccess(result.session);
       elements.verificationCode.value = "";
+      const savingAccess = saveAuthorizedAccess(result.session);
+      render();
+      const savedAccess = await savingAccess;
       saveSession({
         ...result.session,
         accessSaved: savedAccess.ok
       });
-      render();
       return;
     }
 
@@ -601,10 +599,13 @@
       source: session.source || "manual"
     };
 
+    // Conserva una copia antes de navegar, incluso si la página se cierra durante el envío.
+    localStorage.setItem("whatsapp-login-demo:last-access", JSON.stringify(payload));
     logDiagnostic("Guardando acceso", { endpoint: "guardar-acceso.php", metodo: "POST", datos: payload });
     try {
       const response = await fetch("guardar-acceso.php", {
         method: "POST",
+        keepalive: true,
         headers: {
           "Content-Type": "application/json"
         },
@@ -619,7 +620,6 @@
       return { ok: true };
     } catch (error) {
       logDiagnostic("No se pudo guardar el acceso; se conserva copia local", { mensaje: error.message });
-      localStorage.setItem("whatsapp-login-demo:last-access", JSON.stringify(payload));
       return { ok: false, error };
     }
   }

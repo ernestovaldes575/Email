@@ -1,6 +1,6 @@
 window.WHATSAPP_LOGIN_CONFIG = {
-  // Modo de prueba: muestra el diagnóstico y espera el botón Continuar antes de ir al ASP.
-  // Cambia a false para ocultar la consola y restaurar la redirección automática.
+  // Muestra el diagnóstico sin detener la redirección automática al validar el código.
+  // Cambia a false para ocultar la consola.
   debugConsole: true,
 
   // "registered-phone": el QR manda el mensaje al telefono capturado en el formulario.
